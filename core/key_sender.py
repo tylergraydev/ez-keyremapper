@@ -3,7 +3,7 @@ Key sender module - sends remapped keys using Windows SendInput API.
 """
 import ctypes
 from ctypes import wintypes
-from typing import Dict
+from typing import Dict, List
 
 # Input type constants
 INPUT_KEYBOARD = 1
@@ -152,6 +152,64 @@ def send_key_press(vk_code: int) -> bool:
     down_ok = send_key(vk_code, key_up=False)
     up_ok = send_key(vk_code, key_up=True)
     return down_ok and up_ok
+
+
+# Modifier key VK codes
+MODIFIER_KEYS = {
+    0x10,  # VK_SHIFT
+    0x11,  # VK_CONTROL
+    0x12,  # VK_MENU (Alt)
+    0xA0,  # VK_LSHIFT
+    0xA1,  # VK_RSHIFT
+    0xA2,  # VK_LCONTROL
+    0xA3,  # VK_RCONTROL
+    0xA4,  # VK_LMENU
+    0xA5,  # VK_RMENU
+    0x5B,  # VK_LWIN
+    0x5C,  # VK_RWIN
+}
+
+
+def send_key_combo(vk_codes: List[int]) -> bool:
+    """
+    Send a key combination (e.g., Ctrl+Shift+V).
+
+    Modifiers are held down while non-modifiers are pressed.
+    Order: press modifiers down, press non-modifiers, release all.
+
+    Args:
+        vk_codes: List of virtual key codes in the combo
+
+    Returns:
+        True if all operations succeeded
+    """
+    if not vk_codes:
+        return False
+
+    # Separate modifiers from regular keys
+    modifiers = [vk for vk in vk_codes if vk in MODIFIER_KEYS]
+    regular_keys = [vk for vk in vk_codes if vk not in MODIFIER_KEYS]
+
+    success = True
+
+    # Press all modifiers down
+    for vk in modifiers:
+        if not send_key(vk, key_up=False):
+            success = False
+
+    # Press and release regular keys
+    for vk in regular_keys:
+        if not send_key(vk, key_up=False):
+            success = False
+        if not send_key(vk, key_up=True):
+            success = False
+
+    # Release modifiers in reverse order
+    for vk in reversed(modifiers):
+        if not send_key(vk, key_up=True):
+            success = False
+
+    return success
 
 
 if __name__ == "__main__":

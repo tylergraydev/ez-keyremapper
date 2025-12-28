@@ -10,7 +10,7 @@ import zipfile
 import tempfile
 import urllib.request
 import shutil
-from typing import Callable, Dict, Optional, List
+from typing import Callable, Dict, Optional, List, Union
 from dataclasses import dataclass
 
 
@@ -423,8 +423,8 @@ class KeyInterceptor:
         # Target device to intercept (device number 1-10)
         self._target_device: Optional[int] = None
 
-        # Key mappings: input_vk -> output_vk
-        self._mappings: Dict[int, int] = {}
+        # Key mappings: input_vk -> output_vk or [vk1, vk2, ...] for combos
+        self._mappings: Dict[int, Union[int, List[int]]] = {}
 
         # Callbacks
         self._on_key_event: Optional[Callable[[KeyEvent], None]] = None
@@ -469,13 +469,13 @@ class KeyInterceptor:
                 return
         self._target_device = None
 
-    def set_mappings(self, mappings: Dict[int, int]):
-        """Set key mappings (input_vk -> output_vk)."""
+    def set_mappings(self, mappings: Dict[int, Union[int, List[int]]]):
+        """Set key mappings (input_vk -> output_vk or [vk1, vk2, ...])."""
         self._mappings = mappings.copy()
 
-    def add_mapping(self, input_vk: int, output_vk: int):
-        """Add a single key mapping."""
-        self._mappings[input_vk] = output_vk
+    def add_mapping(self, input_vk: int, output: Union[int, List[int]]):
+        """Add a key mapping (single key or combo)."""
+        self._mappings[input_vk] = output
 
     def remove_mapping(self, input_vk: int):
         """Remove a key mapping."""
@@ -566,16 +566,25 @@ class KeyInterceptor:
                     should_remap = True
 
             if should_remap:
-                # Send the remapped key instead
-                output_vk = self._mappings[vk_code]
-                output_scan = self._vk_to_scan(output_vk)
+                output = self._mappings[vk_code]
 
-                new_stroke = InterceptionKeyStroke()
-                new_stroke.code = output_scan
-                new_stroke.state = stroke.state  # Preserve up/down state
-                new_stroke.information = stroke.information
+                if isinstance(output, list):
+                    # Combo mapping - only trigger on key down, block key up
+                    if not is_key_up:
+                        # Import here to avoid circular imports
+                        from core.key_sender import send_key_combo
+                        send_key_combo(output)
+                    # Don't send the original key (it's consumed)
+                else:
+                    # Single key mapping - send remapped key
+                    output_scan = self._vk_to_scan(output)
 
-                self._driver.send(device, new_stroke)
+                    new_stroke = InterceptionKeyStroke()
+                    new_stroke.code = output_scan
+                    new_stroke.state = stroke.state  # Preserve up/down state
+                    new_stroke.information = stroke.information
+
+                    self._driver.send(device, new_stroke)
             else:
                 # Pass through original key
                 self._driver.send(device, stroke)

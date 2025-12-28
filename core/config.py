@@ -3,15 +3,18 @@ Configuration management - save/load mappings to JSON file.
 """
 import json
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Union, List
 from dataclasses import dataclass
+
+# Mapping value can be single VK (int) or combo (List[int])
+MappingValue = Union[int, List[int]]
 
 
 @dataclass
 class Config:
     """Application configuration."""
     target_device: Optional[int] = None  # Interception device number (1-10)
-    mappings: Dict[int, int] = None  # input_vk -> output_vk
+    mappings: Dict[int, MappingValue] = None  # input_vk -> output_vk or [vk1, vk2, ...]
     enabled: bool = True
 
     def __post_init__(self):
@@ -49,6 +52,7 @@ def save_config(config: Config) -> bool:
         config_path = get_config_path()
 
         # Convert to JSON-serializable format
+        # Mappings values can be int or List[int], both are JSON-safe
         data = {
             "target_device": config.target_device,
             "mappings": {str(k): v for k, v in config.mappings.items()},
@@ -81,9 +85,11 @@ def load_config() -> Config:
             data = json.load(f)
 
         # Convert mappings keys back to int
+        # Values can be int (single key) or list (combo)
         mappings = {}
         if "mappings" in data and data["mappings"]:
-            mappings = {int(k): v for k, v in data["mappings"].items()}
+            for k, v in data["mappings"].items():
+                mappings[int(k)] = v  # v is already int or list from JSON
 
         # Get target device (int)
         target_device = data.get("target_device")

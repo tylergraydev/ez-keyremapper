@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Union
 
 from core.key_interceptor import get_interceptor, KeyboardDevice
 from core.key_sender import vk_to_name
@@ -281,8 +281,8 @@ class MainWindow(QMainWindow):
         if dialog.exec_() == CaptureDialog.Accepted:
             mapping = dialog.get_mapping()
             if mapping:
-                input_vk, output_vk = mapping
-                self._interceptor.add_mapping(input_vk, output_vk)
+                input_vk, output = mapping  # output can be int or List[int]
+                self._interceptor.add_mapping(input_vk, output)
                 self._update_mapping_list()
                 self._save_config()
 
@@ -315,9 +315,15 @@ class MainWindow(QMainWindow):
     def _update_mapping_list(self):
         """Update the mapping list widget."""
         self._mapping_list.clear()
-        for input_vk, output_vk in self._interceptor._mappings.items():
+        for input_vk, output in self._interceptor._mappings.items():
+            # Format output (single key or combo)
+            if isinstance(output, list):
+                output_str = " + ".join(vk_to_name(vk) for vk in output)
+            else:
+                output_str = vk_to_name(output)
+
             item = QListWidgetItem(
-                f"{vk_to_name(input_vk)}  \u2192  {vk_to_name(output_vk)}"
+                f"{vk_to_name(input_vk)}  \u2192  {output_str}"
             )
             item.setData(Qt.UserRole, input_vk)
             self._mapping_list.addItem(item)
