@@ -1,0 +1,98 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install PyQt5 pyinstaller
+
+    - name: Download Interception driver
+      run: |
+        # Download and extract Interception
+        Invoke-WebRequest -Uri "https://github.com/oblitum/Interception/releases/download/v1.0.1/Interception.zip" -OutFile "Interception.zip"
+        Expand-Archive -Path "Interception.zip" -DestinationPath "."
+
+        # Copy DLL to project root
+        Copy-Item "Interception/library/x64/interception.dll" -Destination "."
+
+        # Copy driver installer
+        Copy-Item -Path "Interception/command line installer" -Destination "interception_driver" -Recurse
+      shell: pwsh
+
+    - name: Build executable
+      run: |
+        pyinstaller --clean ez_keyremapper.spec
+
+    - name: Get version
+      id: version
+      run: |
+        if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+          echo "VERSION=${{ github.event.inputs.version }}" >> $env:GITHUB_OUTPUT
+        } else {
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^v', ''
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        }
+      shell: pwsh
+
+    - name: Rename executable with version
+      run: |
+        Move-Item "dist/EZ Key Remapper.exe" "dist/EZ-Key-Remapper-${{ steps.version.outputs.VERSION }}.exe"
+      shell: pwsh
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: EZ-Key-Remapper-${{ steps.version.outputs.VERSION }}
+        path: dist/EZ-Key-Remapper-*.exe
+
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', github.event.inputs.version) || github.ref_name }}
+        name: EZ Key Remapper ${{ steps.version.outputs.VERSION }}
+        body: |
+          ## EZ Key Remapper ${{ steps.version.outputs.VERSION }}
+
+          A simple tool to remap keys from a specific keyboard device (like a macro pad) to different keys.
+
+          ### Installation
+          1. Download `EZ-Key-Remapper-${{ steps.version.outputs.VERSION }}.exe`
+          2. Run the executable
+          3. On first run, it will prompt to install the Interception driver (requires admin + reboot)
+          4. After reboot, run again and configure your key mappings
+
+          ### Features
+          - Device-specific key remapping (only affects selected keyboard)
+          - Auto-detect your macro pad by pressing any key
+          - Persistent configuration
+          - System tray support
+        files: dist/EZ-Key-Remapper-*.exe
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
