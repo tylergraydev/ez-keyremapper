@@ -34,7 +34,8 @@ Thumbs.db
 
 # PyInstaller
 *.manifest
-*.spec
+# Keep ez_keyremapper.spec but ignore others
+!ez_keyremapper.spec
 
 # Config (user-specific)
 # .ez-keyremapper/  # This is in user's home dir anyway
